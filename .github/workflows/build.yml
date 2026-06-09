@@ -1,0 +1,104 @@
+name: QWRT-IPQ60xx-ZFXY-CRB-JD256-NSS-全自动编译
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 720
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 开启编译缓存（加速二次编译）
+        uses: stupid-coder/cache@main
+        with:
+          path: |
+            lede/
+            !lede/staging_dir/
+            !lede/build_dir/
+            !lede/tmp/
+          key: ${{ runner.os }}-qwrt-ipq60xx-zfxy
+          restore-keys: ${{ runner.os }}-qwrt-ipq60xx
+
+      - name: 安装编译环境
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential libncurses5-dev git wget curl ccache python3 python3-pip
+          sudo apt install -y qemu-utils qemu-kvm libvirt-daemon-dev
+
+      - name: 拉取 Lean QSDK 源码（QSDK12.5 / IPQ60xx 专用）
+        run: |
+          git clone https://github.com/coolsnowwolf/lede.git lede
+          cd lede
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 安装你需要的自定义插件
+        run: |
+          cd lede/package
+          git clone https://github.com/vernedma/daed.git
+          git clone https://github.com/vernedma/openclash.git
+          git clone https://github.com/vernedma/mosdns.git
+          git clone https://github.com/vernedma/mwan3help.git
+          cd ..
+
+      - name: 写入精准编译配置（IPQ60xx + NSS + 全套插件）
+        run: |
+          cd lede
+          cat > .config << EOF
+          CONFIG_TARGET_ipq60xx=y
+          CONFIG_TARGET_ipq60xx_generic=y
+          CONFIG_TARGET_DEVICE_ipq60xx_generic_DEVICE_zfxy_crb_jd256=y
+          CONFIG_HAS_NSS_FIRMWARE=y
+          CONFIG_PACKAGE_kmod-qca-nss-drv=y
+          CONFIG_PACKAGE_kmod-qca-nss-ecm=y
+          CONFIG_PACKAGE_kmod-qca-nss-crypto=y
+
+          # 你要的插件
+          CONFIG_PACKAGE_mwan3=y
+          CONFIG_PACKAGE_mwan3help=y
+          CONFIG_PACKAGE_adguardhome=y
+          CONFIG_PACKAGE_daed=y
+          CONFIG_PACKAGE_openclash=y
+          CONFIG_PACKAGE_mosdns=y
+          CONFIG_PACKAGE_qemu-kvm=y
+
+          # 全套主题
+          CONFIG_PACKAGE_luci-theme-argon=y
+          CONFIG_PACKAGE_luci-theme-edge=y
+          CONFIG_PACKAGE_luci-theme-opentopd=y
+          CONFIG_PACKAGE_luci-theme-bootstrap=y
+
+          # 系统基础
+          CONFIG_TARGET_ROOTFS_SQUASHFS=y
+          CONFIG_TARGET_ROOTFS_UBI=y
+          EOF
+
+      - name: 生成配置 & 下载依赖
+        run: |
+          cd lede
+          make defconfig
+          make download -j8
+
+      - name: 开始编译固件
+        run: |
+          cd lede
+          make -j$(nproc) || make -j1 V=s
+
+      - name: 精准重命名固件（防不识别）
+        run: |
+          cd lede/bin/targets/ipq60xx/generic
+          mv *.bin QWRT-R26.3.8-NSS-ZFXY-CRB-JD256-$(date +%Y%m%d).bin
+          mv *.ubi QWRT-R26.3.8-NSS-ZFXY-CRB-JD256-$(date +%Y%m%d).ubi
+
+      - name: 上传固件
+        uses: actions/upload-artifact@v4
+        with:
+          name: QWRT-IPQ60xx-ZFXY-CRB-JD256
+          path: lede/bin/targets/ipq60xx/generic/*
