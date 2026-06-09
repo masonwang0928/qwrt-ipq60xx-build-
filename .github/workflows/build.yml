@@ -27,6 +27,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-qwrt-ipq60xx-zfxy-
 
+      - name: 优化网络环境（解决DNS/解析问题）
+        run: |
+          echo "nameserver 223.5.5.5" | sudo tee /etc/resolv.conf
+          echo "nameserver 114.114.114.114" | sudo tee -a /etc/resolv.conf
+          git config --global url."https://gitproxy.click/https://github.com/".insteadOf "https://github.com/"
+
       - name: 安装编译环境（已修复依赖）
         run: |
           sudo apt update
@@ -40,13 +46,14 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: 安装你需要的自定义插件
+      - name: 安装你需要的自定义插件（已换镜像源）
         run: |
           cd lede/package
-          git clone https://github.com/vernedma/daed.git
-          git clone https://github.com/vernedma/openclash.git
-          git clone https://github.com/vernedma/mosdns.git
-          git clone https://github.com/vernedma/mwan3help.git
+          # 使用国内镜像拉取插件，避免解析失败
+          git clone https://gitproxy.click/https://github.com/vernedma/daed.git
+          git clone https://gitproxy.click/https://github.com/vernedma/openclash.git
+          git clone https://gitproxy.click/https://github.com/vernedma/mosdns.git
+          git clone https://gitproxy.click/https://github.com/vernedma/mwan3help.git
           cd ..
 
       - name: 写入精准编译配置（IPQ60xx + NSS + 全套插件）
