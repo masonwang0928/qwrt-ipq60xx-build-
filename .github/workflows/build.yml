@@ -27,11 +27,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-qwrt-ipq60xx-zfxy-
 
-      - name: 安装编译环境
+      - name: 安装编译环境（已修复依赖）
         run: |
           sudo apt update
-          sudo apt install -y build-essential libncurses5-dev git wget curl ccache python3 python3-pip
-          sudo apt install -y qemu-utils qemu-kvm libvirt-daemon-dev
+          sudo apt install -y build-essential libncurses5-dev git wget curl ccache \
+            python3 python3-pip qemu-utils qemu-kvm
 
       - name: 拉取 Lean QSDK 源码（QSDK12.5 / IPQ60xx 专用）
         run: |
