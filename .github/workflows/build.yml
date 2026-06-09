@@ -15,16 +15,17 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 开启编译缓存（加速二次编译）
-        uses: stupid-coder/cache@main
+      - name: 开启编译缓存（官方稳定版）
+        uses: actions/cache@v4
         with:
           path: |
             lede/
             !lede/staging_dir/
             !lede/build_dir/
             !lede/tmp/
-          key: ${{ runner.os }}-qwrt-ipq60xx-zfxy
-          restore-keys: ${{ runner.os }}-qwrt-ipq60xx
+          key: ${{ runner.os }}-qwrt-ipq60xx-zfxy-${{ hashFiles('lede/.config') }}
+          restore-keys: |
+            ${{ runner.os }}-qwrt-ipq60xx-zfxy-
 
       - name: 安装编译环境
         run: |
