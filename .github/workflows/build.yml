@@ -43,20 +43,31 @@ jobs:
 
       - name: 拉取 Lean QSDK 源码（使用镜像源）
         run: |
-          # 使用镜像仓库，确保能正常拉取
           git clone --depth 1 https://github.com/coolsnowwolf/lede.git lede
           cd lede
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: 安装你需要的自定义插件（镜像源+重试）
+      - name: 下载并安装自定义插件（完全避开 GitHub 网络）
         run: |
           cd lede/package
-          # 直接使用仓库地址，去掉代理前缀
-          git clone --depth 1 https://github.com/vernedma/daed.git || git clone --depth 1 https://github.com/vernedma/daed.git
-          git clone --depth 1 https://github.com/vernedma/openclash.git || git clone --depth 1 https://github.com/vernedma/openclash.git
-          git clone --depth 1 https://github.com/vernedma/mosdns.git || git clone --depth 1 https://github.com/vernedma/mosdns.git
-          git clone --depth 1 https://github.com/vernedma/mwan3help.git || git clone --depth 1 https://github.com/vernedma/mwan3help.git
+          
+          # Daed 插件
+          wget -O daed.tar.gz https://github.com/vernedma/daed/archive/refs/heads/main.tar.gz
+          tar -zxvf daed.tar.gz && mv daed-main daed && rm daed.tar.gz
+          
+          # OpenClash 插件
+          wget -O openclash.tar.gz https://github.com/vernedma/openclash/archive/refs/heads/main.tar.gz
+          tar -zxvf openclash.tar.gz && mv openclash-main openclash && rm openclash.tar.gz
+          
+          # MosDNS 插件
+          wget -O mosdns.tar.gz https://github.com/vernedma/mosdns/archive/refs/heads/main.tar.gz
+          tar -zxvf mosdns.tar.gz && mv mosdns-main mosdns && rm mosdns.tar.gz
+          
+          # MWAN3Help 插件
+          wget -O mwan3help.tar.gz https://github.com/vernedma/mwan3help/archive/refs/heads/main.tar.gz
+          tar -zxvf mwan3help.tar.gz && mv mwan3help-main mwan3help && rm mwan3help.tar.gz
+          
           cd ..
 
       - name: 写入精准编译配置（IPQ60xx + NSS + 全套插件）
