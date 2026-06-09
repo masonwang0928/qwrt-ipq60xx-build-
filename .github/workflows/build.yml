@@ -1,150 +1,80 @@
-name: ZFXY-CRB-JD256-IPQ60XX-6.12-NSS-NOWIFI
+name: ZFXY-CRB-JD256-With-Daed
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: 0 19 * * *
-
-env:
-  REPO_URL: https://github.com/qosmio/openwrt-ipq.git
-  REPO_BRANCH: main-nss
-  CONFIG_FILE: configs/ipq60xx-6.12-nowifi.config
-  DIY_SCRIPT: libwrt.sh
-  CLASH_KERNEL: aarch64
-  CACHE_TOOLCHAIN: true
-  UPLOAD_BIN_DIR: false
-  FIRMWARE_RELEASE: true
-  FIRMWARE_TAG: ZFXY-CRB-JD256-IPQ60XX-6.12-NSS
-  TZ: Asia/Shanghai
+  push:
+    branches:
+      - main
 
 jobs:
-  Build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: read
+  build:
+    runs-on: ubuntu-22.04
     steps:
-    - name: Check Server Performance
-      run: |
-        echo "--------------------------CPU信息--------------------------"
-        echo "CPU物理数量：$(cat /proc/cpuinfo | grep "physical id" | sort | uniq | wc -l)"
-        echo -e "CPU核心信息：$(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c) \n"
-        echo "--------------------------内存信息--------------------------"
-        echo -e "$(sudo lshw -short -C memory | grep GiB) \n"
-        echo "--------------------------硬盘信息--------------------------"
-        echo "硬盘数量：$(ls /dev/sd* | grep -v [1-9] | wc -l)" && df -hT
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Initialization Environment
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
-        sudo -E apt -yqq install dos2unix libfuse-dev
-        sudo -E apt -yqq autoremove --purge
-        sudo -E apt -yqq autoclean && sudo -E apt clean
-        sudo timedatectl set-timezone "$TZ"
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential libncurses5-dev git wget curl ccache \
+            python3 python3-pip qemu-utils
 
-    - name: Combine Disks
-      uses: easimon/maximize-build-space@master
-      with:
-        swap-size-mb: 1024
-        temp-reserve-mb: 100
-        root-reserve-mb: 1024
+      - name: Clone OpenWrt source
+        run: |
+          git clone --depth 1 -b main-nss https://github.com/qosmio/openwrt-ipq.git openwrt
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
 
-    - name: Checkout
-      uses: actions/checkout@main
+      - name: Add custom packages (Daed + OpenClash + MosDNS + MWAN3Help)
+        run: |
+          cd openwrt/package
+          # Daed（正确仓库 + ghproxy 加速）
+          git clone --depth 1 https://mirror.ghproxy.com/https://github.com/daeuniverse/daed.git luci-app-daed
+          # OpenClash
+          git clone --depth 1 https://mirror.ghproxy.com/https://github.com/vernedma/openclash.git
+          # MosDNS
+          git clone --depth 1 https://mirror.ghproxy.com/https://github.com/sbwml/luci-app-mosdns.git
+          # MWAN3Help
+          git clone --depth 1 https://mirror.ghproxy.com/https://github.com/kiddin9/luci-app-mwan3help.git
 
-    - name: Clone Source Code
-      run: |
-        git clone --depth=1 -b $REPO_BRANCH $REPO_URL openwrt
-        cd openwrt
-        echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
-        VERSION_INFO=$(git show -s --date=short --format="作者: %an<br/>时间: %cd<br/>内容: %s<br/>hash: %H")
-        echo "VERSION_INFO=$VERSION_INFO" >> $GITHUB_ENV
+      - name: Configure firmware
+        run: |
+          cd openwrt
+          cat > .config << EOF
+          CONFIG_TARGET_qualcommax=y
+          CONFIG_TARGET_qualcommax_ipq60xx=y
+          CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re_cs_07=y
+          CONFIG_HAS_NSS_FIRMWARE=y
+          CONFIG_PACKAGE_kmod-qca-nss-drv=y
+          CONFIG_PACKAGE_kmod-qca-nss-ecm=y
+          CONFIG_PACKAGE_kmod-qca-nss-crypto=y
+          CONFIG_FW4=y
+          CONFIG_PACKAGE_mwan3=y
+          CONFIG_PACKAGE_mwan3help=y
+          CONFIG_PACKAGE_adguardhome=y
+          CONFIG_PACKAGE_luci-app-mosdns=y
+          CONFIG_PACKAGE_luci-app-openclash=y
+          CONFIG_PACKAGE_luci-app-daed=y
+          CONFIG_PACKAGE_luci-theme-argon=y
+          CONFIG_TARGET_ROOTFS_SQUASHFS=y
+          CONFIG_TARGET_ROOTFS_UBI=y
+          CONFIG_TARGET_ROOTFS_PARTSIZE=240
+          EOF
 
-    - name: Install Feeds
-      run: |
-        cd $OPENWRT_PATH
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
+      - name: Download packages
+        run: |
+          cd openwrt
+          make defconfig
+          make download -j8
 
-    - name: Install Custom Packages
-      run: |
-        cd $OPENWRT_PATH/package
-        git clone --depth 1 https://github.com/vernedma/openclash.git
-        git clone --depth 1 https://github.com/sbwml/luci-app-mosdns.git
-        git clone --depth 1 https://github.com/kiddin9/luci-app-mwan3help.git
-        git clone --depth 1 https://github.com/daedre/daed.git
+      - name: Compile firmware
+        run: |
+          cd openwrt
+          make -j$(nproc) || make -j1 V=s
 
-    - name: Load Custom Configuration
-      run: |
-        [ -e files ] && mv files $OPENWRT_PATH/files
-        cp $CONFIG_FILE $OPENWRT_PATH/.config
-        chmod +x $DIY_SCRIPT
-        cd $OPENWRT_PATH
-        $GITHUB_WORKSPACE/$DIY_SCRIPT
-
-    - name: Generate Variables
-      run: |
-        cd $OPENWRT_PATH
-        make defconfig
-        SOURCE_REPO="$(echo $REPO_URL | awk -F '/' '{print $(NF)}')"
-        echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
-        DEVICE_TARGET=$(grep CONFIG_TARGET_BOARD .config | awk -F '"' '{print $2}')
-        echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
-        DEVICE_SUBTARGET=$(grep CONFIG_TARGET_SUBTARGET .config | awk -F '"' '{print $2}')
-        echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
-
-    - name: Cache Toolchain
-      if: env.CACHE_TOOLCHAIN == 'true'
-      uses: HiGarfield/cachewrtbuild@main
-      with:
-        ccache: false
-        mixkey: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
-        prefix: ${{ env.OPENWRT_PATH }}
-
-    - name: Download DL Package
-      run: |
-        cd $OPENWRT_PATH
-        make download -j8
-        find dl -size -1024c -exec rm -f {} \;
-
-    - name: Compile Firmware
-      id: compile
-      run: |
-        cd $OPENWRT_PATH
-        make -j$(nproc) || make -j1 V=s
-        echo "status=success" >> $GITHUB_OUTPUT
-        echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
-        echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
-        echo "RELEASE_TAG=${{ env.FIRMWARE_TAG }}_$(date +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
-        VERSION_KERNEL=$(grep -oP 'LINUX_KERNEL_HASH-\K[0-9]+\.[0-9]+\.[0-9]+' target/linux/qualcommax/kernel-6.1 2>/dev/null || true)
-        echo "VERSION_KERNEL=$VERSION_KERNEL" >> $GITHUB_ENV
-
-    - name: Check Space Usage
-      if: (!cancelled())
-      run: df -hT
-
-    - name: Organize Files
-      if: steps.compile.outputs.status == 'success'
-      run: |
-        cd $OPENWRT_PATH/bin/targets/*/*
-        echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
-
-    - name: Upload Firmware To Release
-      if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
-      uses: ncipollo/release-action@v1
-      with:
-        name: ${{ env.DATE }} | ${{ env.FIRMWARE_TAG }}
-        tag: ${{ env.RELEASE_TAG }}
-        allowUpdates: true
-        replacesArtifacts: true
-        token: ${{ secrets.GITHUB_TOKEN }}
-        artifacts: ${{ env.FIRMWARE_PATH }}/*
-        body: |
-          **ZFXY-CRB-JD256 专用 NSS 固件**
-          - 内核：6.12 NSS 原生加速
-          - 源码：qosmio/openwrt-ipq main-nss
-          - 插件：daed / openclash / mosdns / mwan3 / adguardhome
-          - 管理地址：192.168.31.1
-          - 默认密码：password
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: Firmware
+          path: openwrt/bin/targets/qualcommax/ipq60xx/
