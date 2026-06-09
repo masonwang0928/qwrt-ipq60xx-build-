@@ -1,4 +1,4 @@
-name: ZFXY-CRB-JD256-With-Daed
+name: ZFXY-CRB-JD256-NATIVE
 
 on:
   workflow_dispatch:
@@ -29,14 +29,14 @@ jobs:
       - name: Add custom packages (Daed + OpenClash + MosDNS + MWAN3Help)
         run: |
           cd openwrt/package
-          # Daed（正确仓库 + ghproxy 加速）
-          git clone --depth 1 https://mirror.ghproxy.com/https://github.com/daeuniverse/daed.git luci-app-daed
-          # OpenClash
-          git clone --depth 1 https://mirror.ghproxy.com/https://github.com/vernedma/openclash.git
-          # MosDNS
-          git clone --depth 1 https://mirror.ghproxy.com/https://github.com/sbwml/luci-app-mosdns.git
-          # MWAN3Help
-          git clone --depth 1 https://mirror.ghproxy.com/https://github.com/kiddin9/luci-app-mwan3help.git
+          # Daed 官方原版仓库（无镜像）
+          git clone --depth 1 https://github.com/daeuniverse/daed.git luci-app-daed
+          # OpenClash 原版
+          git clone --depth 1 https://github.com/vernedma/openclash.git
+          # MosDNS 原版
+          git clone --depth 1 https://github.com/sbwml/luci-app-mosdns.git
+          # MWAN3Help 原版
+          git clone --depth 1 https://github.com/kiddin9/luci-app-mwan3help.git
 
       - name: Configure firmware
         run: |
